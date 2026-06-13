@@ -580,7 +580,11 @@ async function renderPredMatches(){
   document.getElementById('predContainer').innerHTML='<div class="loading"><span class="spinner"></span>Cargando...</div>';
   const {data:preds}=await sb.from('pronosticos').select('*').eq('participante_id',currentPlayer.id);
   const {data:bonus}=await sb.from('pronosticos_bonus').select('*').eq('participante_id',currentPlayer.id).maybeSingle();
-  const predMap={};(preds||[]).forEach(p=>predMap[p.match_key]={h:p.goles_local,a:p.goles_visitante,r:p.resultado});
+  const predMap={};(preds||[]).forEach(p=>{
+    // Ignorar filas vacías (h, a y r todos null)
+    if(p.goles_local===null&&p.goles_visitante===null&&p.resultado===null)return;
+    predMap[p.match_key]={h:p.goles_local,a:p.goles_visitante,r:p.resultado};
+  });
 
   const byDate={};
   PARTIDOS.forEach(p=>{const fd=fechaLocal(p.kickoff);if(!byDate[fd])byDate[fd]=[];byDate[fd].push(p);});
@@ -755,7 +759,11 @@ async function showOtherPreds(playerId,playerName){
   event.currentTarget.classList.add('selected');
   document.getElementById('othersMatchView').innerHTML='<div class="loading"><span class="spinner"></span>Cargando pronósticos...</div>';
   const {data:preds}=await sb.from('pronosticos').select('*').eq('participante_id',playerId);
-  const predMap={};(preds||[]).forEach(p=>predMap[p.match_key]={h:p.goles_local,a:p.goles_visitante,r:p.resultado});
+  const predMap={};(preds||[]).forEach(p=>{
+    // Ignorar filas vacías (h, a y r todos null)
+    if(p.goles_local===null&&p.goles_visitante===null&&p.resultado===null)return;
+    predMap[p.match_key]={h:p.goles_local,a:p.goles_visitante,r:p.resultado};
+  });
 
   // Only show locked matches
   const lockedMatches=PARTIDOS.filter(p=>isLocked(p.kickoff));
@@ -774,11 +782,8 @@ async function showOtherPreds(playerId,playerName){
       const r=results[p.key];
       let predStr='—';
       if(pred){
-        const hasScore=pred.h!=null&&pred.a!=null;
-        const hasSel=pred.r!=null;
-        if(hasScore) predStr=`${pred.h} - ${pred.a}`;
-        else if(hasSel) predStr=pred.r==='1'?`Gana ${p.home.n}`:pred.r==='X'?'Empate':`Gana ${p.away.n}`;
-        else predStr='Sin pronóstico';
+        if(pred.h!=null&&pred.a!=null) predStr=`${pred.h} - ${pred.a}`;
+        else if(pred.r) predStr=pred.r==='1'?`Gana ${p.home.n}`:pred.r==='X'?'Empate':`Gana ${p.away.n}`;
       }
       let pts='';
       if(r&&pred){
