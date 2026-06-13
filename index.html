@@ -464,16 +464,10 @@ let serverTimeOffset=0;
 
 // ── SERVER TIME ──────────────────────────────────────────────
 async function syncServerTime(){
-  try{
-    const t0=Date.now();
-    // Usamos una query real con la anon key para leer el header Date del servidor
-    const resp=await fetch(SUPABASE_URL+'/rest/v1/resultados?select=match_key&limit=1',{
-      headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}
-    });
-    const t1=Date.now();
-    const d=resp.headers.get('date');
-    if(d) serverTimeOffset=new Date(d).getTime()-Math.round((t0+t1)/2);
-  }catch(e){ serverTimeOffset=0; }
+  // Usamos la hora UTC del dispositivo directamente
+  // Los kickoffs están en UTC con Z, y new Date() compara en UTC internamente
+  // así que no hay diferencia de zona horaria — funciona igual en México y España
+  serverTimeOffset=0;
 }
 function nowServer(){ return new Date(Date.now()+serverTimeOffset); }
 function fechaLocal(kickoff){
