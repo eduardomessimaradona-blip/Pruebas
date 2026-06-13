@@ -464,10 +464,13 @@ let serverTimeOffset=0;
 
 // ── SERVER TIME ──────────────────────────────────────────────
 async function syncServerTime(){
-  // Usamos la hora UTC del dispositivo directamente
-  // Los kickoffs están en UTC con Z, y new Date() compara en UTC internamente
-  // así que no hay diferencia de zona horaria — funciona igual en México y España
-  serverTimeOffset=0;
+  try{
+    const t0=Date.now();
+    const resp=await fetch(SUPABASE_URL+'/rest/v1/?apikey='+SUPABASE_KEY);
+    const t1=Date.now();
+    const d=resp.headers.get('date');
+    if(d) serverTimeOffset=new Date(d).getTime()-Math.round((t0+t1)/2);
+  }catch(e){ serverTimeOffset=0; }
 }
 function nowServer(){ return new Date(Date.now()+serverTimeOffset); }
 function fechaLocal(kickoff){
@@ -771,8 +774,12 @@ async function showOtherPreds(playerId,playerName){
       const r=results[p.key];
       let predStr='—';
       if(pred){
-        if(pred.h!=null&&pred.a!=null) predStr=`${pred.h} - ${pred.a}`;
-        else if(pred.r) predStr=pred.r==='1'?`Gana ${p.home.n}`:pred.r==='X'?'Empate':`Gana ${p.away.n}`;
+        const hv=pred.h!=null?pred.h:(pred.a!=null?0:null);
+        const av=pred.a!=null?pred.a:(pred.h!=null?0:null);
+        const hasScore=hv!=null&&av!=null;
+        const hasSel=pred.r!=null;
+        if(hasScore) predStr=`${hv} - ${av}`;
+        else if(hasSel) predStr=pred.r==='1'?`Gana ${p.home.n}`:pred.r==='X'?'Empate':`Gana ${p.away.n}`;
       }
       let pts='';
       if(r&&pred){
