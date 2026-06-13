@@ -360,7 +360,7 @@ const SUPABASE_URL='https://lnefvahjpfbtomupfgkd.supabase.co';
 const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZWZ2YWhqcGZidG9tdXBmZ2tkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2MzMyNTUsImV4cCI6MjA5NTIwOTI1NX0.Prb2IP_Znj3m0PumoW6vIbDUpdEBM7i4Z8gq17HQ6fQ';
 const FOOTBALL_API_KEY='173de29b7acd450282d6cb39b9627468';
 const GRUPO_ID='FOENER';
-const LOCK_HOURS= 3 ; // horas antes de bloquearar
+const LOCK_HOURS=1 ; // horas antes de bloquear
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ── MATCH DATA (chronological order with kickoff times UTC) ──
@@ -473,6 +473,11 @@ async function syncServerTime(){
   }catch(e){ serverTimeOffset=0; }
 }
 function nowServer(){ return new Date(Date.now()+serverTimeOffset); }
+function fechaLocal(kickoff){
+  const d=new Date(kickoff);
+  return d.toLocaleDateString('es-ES',{day:'numeric',month:'short'})
+    .replace('.','').replace(/^\w/,c=>c.toUpperCase());
+}
 
 // ── HELPERS ───────────────────────────────────────────────────
 function isLocked(kickoff){
@@ -559,12 +564,7 @@ function startCountdowns(){
     if(!el)return;
     const timer=setInterval(()=>{
       const mins=minsUntil(p.kickoff);
-      if(mins<=0){
-        clearInterval(timer);
-        // Recargar pronósticos para deshabilitar inputs del partido
-        renderPredMatches();
-        return;
-      }
+      if(mins<=0){clearInterval(timer);el.innerHTML='<span class="locked-badge">🔒 Cerrado</span>';return;}
       if(mins<=LOCK_HOURS*60){
         const h=Math.floor(mins/60),m=Math.floor(mins%60),s=Math.floor((mins*60)%60);
         const cls=mins<30?'countdown':'countdown soon';
@@ -583,7 +583,7 @@ async function renderPredMatches(){
   const predMap={};(preds||[]).forEach(p=>predMap[p.match_key]={h:p.goles_local,a:p.goles_visitante,r:p.resultado});
 
   const byDate={};
-  PARTIDOS.forEach(p=>{if(!byDate[p.fecha])byDate[p.fecha]=[];byDate[p.fecha].push(p);});
+  PARTIDOS.forEach(p=>{const fd=fechaLocal(p.kickoff);if(!byDate[fd])byDate[fd]=[];byDate[fd].push(p);});
 
   let html='';
   Object.keys(byDate).forEach(fecha=>{
@@ -765,7 +765,7 @@ async function showOtherPreds(playerId,playerName){
   }
 
   const byDate={};
-  lockedMatches.forEach(p=>{if(!byDate[p.fecha])byDate[p.fecha]=[];byDate[p.fecha].push(p);});
+  lockedMatches.forEach(p=>{const fd=fechaLocal(p.kickoff);if(!byDate[fd])byDate[fd]=[];byDate[fd].push(p);});
   let html=`<div class="card"><div class="card-head">📋 Pronósticos de ${playerName}</div>`;
   Object.keys(byDate).forEach(fecha=>{
     html+=`<div class="date-divider">📅 ${fecha}</div>`;
@@ -859,7 +859,7 @@ function renderAdminPanel(){
     if(s1&&c[0])s1.value=c[0];if(s2&&c[1])s2.value=c[1];
   });
   const byDate={};
-  PARTIDOS.forEach(p=>{if(!byDate[p.fecha])byDate[p.fecha]=[];byDate[p.fecha].push(p);});
+  PARTIDOS.forEach(p=>{const fd=fechaLocal(p.kickoff);if(!byDate[fd])byDate[fd]=[];byDate[fd].push(p);});
   let resHtml='';
   Object.keys(byDate).forEach(fecha=>{
     resHtml+=`<div style="font-size:11px;font-weight:600;color:var(--gold);letter-spacing:1px;text-transform:uppercase;margin:12px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--border)">📅 ${fecha}</div>`;
