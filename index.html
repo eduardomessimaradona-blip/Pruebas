@@ -580,11 +580,7 @@ async function renderPredMatches(){
   document.getElementById('predContainer').innerHTML='<div class="loading"><span class="spinner"></span>Cargando...</div>';
   const {data:preds}=await sb.from('pronosticos').select('*').eq('participante_id',currentPlayer.id);
   const {data:bonus}=await sb.from('pronosticos_bonus').select('*').eq('participante_id',currentPlayer.id).maybeSingle();
-  const predMap={};(preds||[]).forEach(p=>{
-    // Ignorar filas vacías (h, a y r todos null)
-    if(p.goles_local===null&&p.goles_visitante===null&&p.resultado===null)return;
-    predMap[p.match_key]={h:p.goles_local,a:p.goles_visitante,r:p.resultado};
-  });
+  const predMap={};(preds||[]).forEach(p=>predMap[p.match_key]={h:p.goles_local,a:p.goles_visitante,r:p.resultado});
 
   const byDate={};
   PARTIDOS.forEach(p=>{const fd=fechaLocal(p.kickoff);if(!byDate[fd])byDate[fd]=[];byDate[fd].push(p);});
@@ -758,10 +754,10 @@ async function showOtherPreds(playerId,playerName){
   document.querySelectorAll('.other-card').forEach(c=>c.classList.remove('selected'));
   event.currentTarget.classList.add('selected');
   document.getElementById('othersMatchView').innerHTML='<div class="loading"><span class="spinner"></span>Cargando pronósticos...</div>';
-  const {data:preds}=await sb.from('pronosticos').select('*').eq('participante_id',playerId);
+  const {data:preds,error:predErr}=await sb.from('pronosticos').select('*').eq('participante_id',playerId);
+  console.log('showOtherPreds - playerId:',playerId,'preds count:',(preds||[]).length,'error:',predErr);
   const predMap={};(preds||[]).forEach(p=>{
-    // Ignorar filas vacías (h, a y r todos null)
-    if(p.goles_local===null&&p.goles_visitante===null&&p.resultado===null)return;
+    console.log('  match_key:',p.match_key,'h:',p.goles_local,'a:',p.goles_visitante,'r:',p.resultado);
     predMap[p.match_key]={h:p.goles_local,a:p.goles_visitante,r:p.resultado};
   });
 
