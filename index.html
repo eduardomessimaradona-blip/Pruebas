@@ -961,13 +961,28 @@ async function renderLB(){
   const played=PARTIDOS.filter(p=>results[p.key]);
   if(played.length){
     document.getElementById('resCard').style.display='block';
-    document.getElementById('resDisplay').innerHTML=
-      `<p style="font-size:12px;color:var(--muted);margin-bottom:10px">${played.length} partido(s) con resultado oficial</p>`+
-      played.slice(-10).map(p=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:12px">
-        <span>${p.home.f} ${p.home.n}</span>
-        <span class="score-real">${results[p.key][0]} — ${results[p.key][1]}</span>
-        <span>${p.away.n} ${p.away.f}</span>
-      </div>`).join('');
+    // Group by date
+    const byDate={};
+    played.forEach(p=>{if(!byDate[p.fecha])byDate[p.fecha]=[];byDate[p.fecha].push(p);});
+    let resHtml=`<p style="font-size:12px;color:var(--muted);margin-bottom:10px">${played.length} partido(s) con resultado oficial</p>`;
+    Object.keys(byDate).forEach(fecha=>{
+      resHtml+=`<div class="date-divider">📅 ${fecha}</div>`;
+      byDate[fecha].forEach(p=>{
+        const r=results[p.key];
+        resHtml+=`<div style="display:grid;grid-template-columns:1fr 56px 1fr;align-items:center;gap:4px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05)">
+          <div style="font-size:11px;font-weight:500;display:flex;align-items:center;justify-content:flex-end;gap:4px;text-align:right">
+            <span>${p.home.n}</span><span style="font-size:15px">${p.home.f}</span>
+          </div>
+          <div style="text-align:center">
+            <span class="score-real" style="font-size:14px;padding:4px 6px;white-space:nowrap">${r[0]} — ${r[1]}</span>
+          </div>
+          <div style="font-size:11px;font-weight:500;display:flex;align-items:center;justify-content:flex-start;gap:4px;text-align:left">
+            <span style="font-size:15px">${p.away.f}</span><span>${p.away.n}</span>
+          </div>
+        </div>`;
+      });
+    });
+    document.getElementById('resDisplay').innerHTML=resHtml;
   }
 }
 
