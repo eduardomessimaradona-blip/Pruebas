@@ -11,12 +11,17 @@ const FASES=['Octavos','Cuartos','Semis','Final'];
 let koPartidos=[], koResults={};
 
 async function loadKOData(){
-  const [{data:matches},{data:res}]=await Promise.all([
-    sb.from('partidos_eliminatoria').select('*').eq('grupo_id',GRUPO_ID).order('kickoff'),
-    sb.from('resultados_eliminatoria').select('*')
-  ]);
-  koPartidos=matches||[];
-  koResults={};(res||[]).forEach(r=>koResults[r.match_key]=[+r.goles_local,+r.goles_visitante]);
+  try{
+    const [{data:matches,error:e1},{data:res,error:e2}]=await Promise.all([
+      sb.from('partidos_eliminatoria').select('*').eq('grupo_id',GRUPO_ID).order('kickoff'),
+      sb.from('resultados_eliminatoria').select('*')
+    ]);
+    if(e1||e2){koPartidos=[];koResults={};return;}
+    koPartidos=matches||[];
+    koResults={};(res||[]).forEach(r=>koResults[r.match_key]=[+r.goles_local,+r.goles_visitante]);
+  }catch(e){
+    koPartidos=[];koResults={};
+  }
 }
 
 async function renderKnockout(){
@@ -32,8 +37,12 @@ async function renderKnockout(){
     return;
   }
 
-  const {data:myPreds}=await sb.from('pronosticos_eliminatoria').select('*').eq('participante_id',currentPlayer.id);
-  const predMap={};(myPreds||[]).forEach(p=>predMap[p.match_key]={h:p.goles_local,a:p.goles_visitante,r:p.resultado});
+  let myPreds=[];
+  try{
+    const r=await sb.from('pronosticos_eliminatoria').select('*').eq('participante_id',currentPlayer.id);
+    myPreds=r.data||[];
+  }catch(e){myPreds=[];}
+  const predMap={};myPreds.forEach(p=>predMap[p.match_key]={h:p.goles_local,a:p.goles_visitante,r:p.resultado});
 
   const byFase={};
   koPartidos.forEach(p=>{if(!byFase[p.fase])byFase[p.fase]=[];byFase[p.fase].push(p);});
@@ -1167,6 +1176,7 @@ async function saveClasifResults(){
 // ── LEADERBOARD ───────────────────────────────────────────────
 async function renderLB(){
   document.getElementById('lbContainer').innerHTML='<div class="loading"><span class="spinner"></span>Calculando...</div>';
+  try{
   // Todas las queries en paralelo — sin API externa
   const [{data:resData},{data:players}]=await Promise.all([
     sb.from('resultados').select('*'),
@@ -1238,6 +1248,10 @@ async function renderLB(){
       });
     });
     document.getElementById('resDisplay').innerHTML=resHtml;
+  }
+  }catch(e){
+    document.getElementById('lbContainer').innerHTML=`<p style="font-size:13px;color:var(--muted)">⚠️ Error al cargar la tabla. Reintenta en unos segundos.</p>`;
+    console.error('renderLB error:',e);
   }
 }
 
