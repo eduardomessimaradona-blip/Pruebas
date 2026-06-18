@@ -5,7 +5,146 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Quiniela Mundial 2026 ⚽</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
+// ── KNOCKOUT ──────────────────────────────────────────────────
+const FASES=['Octavos','Cuartos','Semis','Final'];
+let koPartidos=[], koResults={};
+
+async function loadKOData(){
+  const [{data:matches},{data:res}]=await Promise.all([
+    sb.from('partidos_eliminatoria').select('*').eq('grupo_id',GRUPO_ID).order('kickoff'),
+    sb.from('resultados_eliminatoria').select('*')
+  ]);
+  koPartidos=matches||[];
+  koResults={};(res||[]).forEach(r=>koResults[r.match_key]=[+r.goles_local,+r.goles_visitante]);
+}
+
+async function renderKnockout(){
+  document.getElementById('knockoutContainer').innerHTML='<div class="loading"><span class="spinner"></span>Cargando...</div>';
+  await loadKOData();
+
+  if(!koPartidos.length){
+    document.getElementById('knockoutContainer').innerHTML=`<div class="card">
+      <div class="card-head">🏆 Fase eliminatoria</div>
+      <div class="notice" style="margin-bottom:0">⏳ Los cruces se activarán cuando se confirmen los clasificados de fase de grupos. ¡Vuelve el <strong>27 de junio</strong>!</div>
+    </div>`;
+    document.getElementById('knockoutBtnWrap').style.display='none';
+    return;
+  }
+
+  const {data:myPreds}=await sb.from('pronosticos_eliminatoria').select('*').eq('participante_id',currentPlayer.id);
+  const predMap={};(myPreds||[]).forEach(p=>predMap[p.match_key]={h:p.goles_local,a:p.goles_visitante,r:p.resultado});
+
+  const byFase={};
+  koPartidos.forEach(p=>{if(!byFase[p.fase])byFase[p.fase]=[];byFase[p.fase].push(p);});
+
+  const faseOrder=['Octavos','Cuartos','Semis','Final'];
+  let html='<div class="notice">⏱️ Pronósticos bloqueados 3h antes de cada partido. Sin empates en eliminatoria — pronostica quién gana.</div>';
+
+  faseOrder.forEach(fase=>{
+    if(!byFase[fase])return;
+    html+=`<div class="date-divider">🏆 ${fase} de Final</div>`;
+    byFase[fase].forEach(p=>{
+      const locked=isLocked(p.kickoff);
+      const pred=predMap[p.key]||{};
+      const ph=pred.h!=null?pred.h:'', pa=pred.a!=null?pred.a:'', pr=pred.r||'';
+      const dis=locked?'disabled':'';
+      const fechaStr=fechaLocal(p.kickoff);
+      const r=koResults[p.key];
+      const homeF=p.home_flag||'🏳️', awayF=p.away_flag||'🏳️';
+
+      let scoreHtml='';
+      if(r){
+        scoreHtml=`<div style="display:flex;align-items:center;gap:4px;margin-top:4px">
+          <span style="font-size:9px;color:var(--muted)">Resultado:</span>
+          <span class="score-real" style="font-size:12px;padding:2px 6px">${r[0]}–${r[1]}</span>
+        </div>`;
+      }
+
+      html+=`<div class="card" style="margin-bottom:8px">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:8px;letter-spacing:.5px">📅 ${fechaStr}${locked?' · <span class=\"locked-badge\">🔒 Cerrado</span>':''}</div>
+        <div class="match-row${locked?' locked':''}">
+          <div class="team left"><span>${p.home_name}</span><span style="font-size:16px">${homeF}</span></div>
+          <input class="score-inp" type="number" min="0" max="20" id="koph_${p.key}" value="${ph}" placeholder="0" ${dis}
+            oninput="onKOScoreInput('${p.key}')">
+          <div class="match-center">
+            <div style="font-size:9px;color:var(--muted);letter-spacing:.5px">VS</div>
+            <div class="result-sel" id="kors_${p.key}">
+              <button class="rxbtn${pr==='1'?' sel-1':''}" onclick="setKOSel('${p.key}','1',this)" ${dis}>1</button>
+              <button class="rxbtn${pr==='2'?' sel-2':''}" onclick="setKOSel('${p.key}','2',this)" ${dis}>2</button>
+            </div>
+          </div>
+          <input class="score-inp" type="number" min="0" max="20" id="kopa_${p.key}" value="${pa}" placeholder="0" ${dis}
+            oninput="onKOScoreInput('${p.key}')">
+          <div class="team right"><span style="font-size:16px">${awayF}</span><span>${p.away_name}</span></div>
+        </div>
+        ${scoreHtml}
+      </div>`;
+    });
+  });
+
+  document.getElementById('knockoutContainer').innerHTML=html;
+  document.getElementById('knockoutBtnWrap').style.display='block';
+}
+
+function onKOScoreInput(key){
+  const h=document.getElementById('koph_'+key),a=document.getElementById('kopa_'+key);
+  const rs=document.getElementById('kors_'+key);
+  if(!rs)return;
+  const btns=rs.querySelectorAll('.rxbtn');
+  if(h.value===''&&a.value===''){btns.forEach(b=>{b.disabled=false;});return;}
+  // no empate en eliminatoria: si hay empate a 90' el usuario debe elegir 1 o 2
+  const hv=+h.value, av=+a.value;
+  if(hv!==av){
+    const val=hv>av?'1':'2';
+    btns.forEach(b=>{b.disabled=true;b.className='rxbtn';});
+    const idx={'1':0,'2':1}[val];
+    btns[idx].classList.add(val==='1'?'sel-1':'sel-2');
+    rs.dataset.sel=val;
+  } else {
+    // empate marcador → dejar que elija quién gana (penaltis)
+    btns.forEach(b=>{b.disabled=false;});
+  }
+}
+
+function setKOSel(key,val,btn){
+  const rs=document.getElementById('kors_'+key);
+  rs.querySelectorAll('.rxbtn').forEach(b=>b.className='rxbtn');
+  btn.classList.add(val==='1'?'sel-1':'sel-2');
+  rs.dataset.sel=val;
+}
+
+async function saveKnockoutPreds(){
+  if(!currentPlayer)return;
+  document.getElementById('btnSaveKO').textContent='Guardando...';
+  const rows=[];
+  koPartidos.forEach(p=>{
+    if(isLocked(p.kickoff))return;
+    const h=document.getElementById('koph_'+p.key),a=document.getElementById('kopa_'+p.key);
+    const rs=document.getElementById('kors_'+p.key);
+    const sel=rs?.dataset?.sel||null;
+    const hv=h&&h.value!==''?+h.value:null,av=a&&a.value!==''?+a.value:null;
+    if(hv!==null||av!==null||sel)
+      rows.push({participante_id:currentPlayer.id,match_key:p.key,goles_local:hv,goles_visitante:av,resultado:sel});
+  });
+  if(!rows.length){showMsg('saveKOMsg','⚠️ No hay pronósticos nuevos que guardar.',false);document.getElementById('btnSaveKO').textContent='💾 Guardar pronósticos eliminatoria';return;}
+  const {error}=await sb.from('pronosticos_eliminatoria').upsert(rows,{onConflict:'participante_id,match_key'});
+  document.getElementById('btnSaveKO').textContent='💾 Guardar pronósticos eliminatoria';
+  error?showMsg('saveKOMsg','❌ Error al guardar.',false):showMsg('saveKOMsg','✅ ¡Pronósticos guardados!');
+}
+
+function calcPtsKO(pred,r){
+  if(!r||!pred)return 0;
+  // 3pts marcador exacto a 90'
+  if(pred.h!==null&&pred.h===r[0]&&pred.a===r[1])return 3;
+  // 1pt ganador correcto
+  const rGana=r[0]>r[1]?'1':r[0]<r[1]?'2':'pen'; // 'pen' = decidido en penaltis
+  const pGana=pred.r||(pred.h!==null?(pred.h>pred.a?'1':pred.h<pred.a?'2':null):null);
+  if(pGana&&pGana===rGana)return 1;
+  return 0;
+}
+
+</script>
 <style>
 :root{
   --gold:#D4A017;--gold-light:#F5D060;--red:#C8102E;--green:#007A33;
@@ -125,7 +264,6 @@ header p{font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:upp
 .numpad-btn:hover{background:var(--dark4);border-color:var(--gold);color:var(--gold)}
 .numpad-btn:active{transform:scale(.95)}
 .pin-error{color:#FF6B7A;font-size:12px;margin-top:8px;min-height:16px;font-weight:500}
-.email-pre{background:var(--dark4);border-radius:var(--radius-sm);padding:14px;font-size:12px;font-family:monospace;color:var(--text);white-space:pre-wrap;border:1px solid var(--border);margin-top:12px;max-height:300px;overflow-y:auto;line-height:1.6}
 .clasif-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
 .clasif-card{background:var(--dark4);border-radius:var(--radius-sm);padding:9px 11px;border:1px solid var(--border)}
 .clasif-lbl{font-size:10px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px;font-weight:500}
@@ -199,11 +337,11 @@ header p{font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:upp
   </div>
 
   <div class="tabs">
-    <button class="tab active" onclick="showTab('pronos')">⚽ Mis pronós.</button>
+    <button class="tab active" onclick="showTab('pronos')">⚽ Grupos</button>
+    <button class="tab" onclick="showTab('knockout')">🏆 Eliminat.</button>
     <button class="tab" onclick="showTab('otros')">👀 Todos</button>
-    <button class="tab" onclick="showTab('clasificacion')">🏆 Tabla</button>
+    <button class="tab" onclick="showTab('clasificacion')">📊 Tabla</button>
     <button class="tab" onclick="showTab('admin')">🔐 Admin</button>
-    <button class="tab" onclick="showTab('email')">📧 Email</button>
   </div>
 
   <!-- MIS PRONÓSTICOS -->
@@ -331,23 +469,51 @@ header p{font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:upp
       </div>
       <div id="adminMsg" style="margin-top:8px"></div>
 
-      <!-- KNOCKOUT SWITCH -->
-      <div class="card knockout-section" id="knockoutAdminSection">
-        <div class="card-head">🏆 Fase eliminatoria</div>
-        <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Activa esta sección cuando comience la fase de octavos.</p>
-        <button class="btn primary" onclick="activateKnockout()">Activar fase eliminatoria</button>
+      <!-- KNOCKOUT ADMIN -->
+      <div class="card" id="knockoutAdminSection" style="border-color:rgba(212,160,23,.4)">
+        <div class="card-head">🏆 Gestionar fase eliminatoria</div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Crea cada cruce cuando se confirme. Elige equipos de la lista de los 12 grupos.</p>
+        <div class="row">
+          <div class="field"><label>Fase</label>
+            <select id="koFase">
+              <option value="Octavos">Octavos</option>
+              <option value="Cuartos">Cuartos</option>
+              <option value="Semis">Semis</option>
+              <option value="Final">Final</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Equipo local</label>
+            <select id="koHome"></select>
+          </div>
+          <div class="field"><label>Equipo visitante</label>
+            <select id="koAway"></select>
+          </div>
+        </div>
+        <div class="field" style="margin-bottom:12px"><label>Fecha y hora (UTC)</label>
+          <input id="koKickoff" type="datetime-local">
+        </div>
+        <button class="btn primary full" onclick="addKOMatch()">➕ Añadir cruce</button>
+        <div id="koAddMsg" style="margin-top:8px"></div>
+
+        <div class="date-divider" style="margin-top:18px">📋 Cruces creados</div>
+        <div id="koAdminList"><p style="font-size:12px;color:var(--muted)">Cargando...</p></div>
+
+        <div class="date-divider" style="margin-top:18px">⚽ Resultados eliminatoria</div>
+        <div id="koResultsAdmin"></div>
+        <button class="btn red-btn full" onclick="saveKOResultsAdmin()" style="margin-top:10px">💾 Guardar resultados eliminatoria</button>
+        <div id="koResMsg" style="margin-top:8px"></div>
       </div>
     </div>
   </div>
 
-  <!-- EMAIL -->
-  <div id="tab-email" class="section">
-    <div class="card">
-      <div class="card-head">📧 Resumen para compartir</div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:14px">Ranking actualizado listo para copiar y enviar.</p>
-      <button class="btn primary" onclick="genEmail()">🔄 Generar ranking</button>
-      <button class="btn" style="margin-left:8px" onclick="copyEmail()">📋 Copiar</button>
-      <div id="emailPre" class="email-pre" style="display:none"></div>
+  <!-- ELIMINATORIA -->
+  <div id="tab-knockout" class="section">
+    <div id="knockoutContainer"><div class="loading"><span class="spinner"></span>Cargando...</div></div>
+    <div id="knockoutBtnWrap" style="display:none">
+      <button class="btn green full" onclick="saveKnockoutPreds()" id="btnSaveKO">💾 Guardar pronósticos eliminatoria</button>
+      <div id="saveKOMsg" style="margin-top:8px"></div>
     </div>
   </div>
 </div>
@@ -547,11 +713,11 @@ function logout(){
 
 // ── TABS ──────────────────────────────────────────────────────
 function showTab(id){
-  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['pronos','otros','clasificacion','admin','email'][i]===id));
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['pronos','knockout','otros','clasificacion','admin'][i]===id));
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
   document.getElementById('tab-'+id).classList.add('active');
   if(id==='clasificacion')renderLB();
-  if(id==='email')genEmail();
+  if(id==='knockout')renderKnockout();
   if(id==='otros')renderOthers();
   if(id==='admin'&&document.getElementById('adminPanel').style.display!=='none')renderAdminPanel();
 }
@@ -883,6 +1049,87 @@ function renderAdminPanel(){
     });
   });
   document.getElementById('resultadosAdmin').innerHTML=resHtml;
+
+  // Knockout admin init
+  document.getElementById('koHome').innerHTML=teamOptsHtml();
+  document.getElementById('koAway').innerHTML=teamOptsHtml();
+  renderKOAdminList();
+}
+
+async function renderKOAdminList(){
+  const {data:matches}=await sb.from('partidos_eliminatoria').select('*').eq('grupo_id',GRUPO_ID).order('kickoff');
+  koPartidos=matches||[];
+  const listEl=document.getElementById('koAdminList');
+  if(!koPartidos.length){listEl.innerHTML='<p style="font-size:12px;color:var(--muted)">Sin cruces creados todavía.</p>';document.getElementById('koResultsAdmin').innerHTML='';return;}
+
+  const byFase={};
+  koPartidos.forEach(p=>{if(!byFase[p.fase])byFase[p.fase]=[];byFase[p.fase].push(p);});
+  let html='';
+  ['Octavos','Cuartos','Semis','Final'].forEach(fase=>{
+    if(!byFase[fase])return;
+    html+=`<div style="font-size:11px;font-weight:600;color:var(--gold);margin:10px 0 4px">${fase}</div>`;
+    byFase[fase].forEach(p=>{
+      html+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:12px">
+        <span>${p.home_flag} ${p.home_name} vs ${p.away_name} ${p.away_flag}</span>
+        <button class="btn" style="font-size:11px;padding:4px 8px;color:#FF6B7A" onclick="deleteKOMatch('${p.key}')">🗑️</button>
+      </div>`;
+    });
+  });
+  listEl.innerHTML=html;
+
+  // Results inputs
+  let resHtml='';
+  koPartidos.forEach(p=>{
+    const r=koResults[p.key]||[];
+    const hv=r[0]!=null?r[0]:'', av=r[1]!=null?r[1]:'';
+    resHtml+=`<div style="display:grid;grid-template-columns:1fr 32px 16px 32px 1fr;gap:4px;align-items:center;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04)">
+      <div style="font-size:11px;text-align:right;color:var(--text)">${p.home_flag} ${p.home_name}</div>
+      <input type="number" min="0" max="20" id="kra_${p.key}_h" value="${hv}" placeholder="—"
+        style="text-align:center;font-size:13px;font-weight:600;padding:5px 2px;border:1px solid rgba(255,255,255,.1);border-radius:6px;background:var(--dark4);color:var(--text);width:100%">
+      <div style="text-align:center;font-size:11px;color:var(--muted)">-</div>
+      <input type="number" min="0" max="20" id="kra_${p.key}_a" value="${av}" placeholder="—"
+        style="text-align:center;font-size:13px;font-weight:600;padding:5px 2px;border:1px solid rgba(255,255,255,.1);border-radius:6px;background:var(--dark4);color:var(--text);width:100%">
+      <div style="font-size:11px;text-align:left;color:var(--text)">${p.away_name} ${p.away_flag}</div>
+    </div>`;
+  });
+  document.getElementById('koResultsAdmin').innerHTML=resHtml;
+}
+
+async function addKOMatch(){
+  const fase=document.getElementById('koFase').value;
+  const homeN=document.getElementById('koHome').value;
+  const awayN=document.getElementById('koAway').value;
+  const kickoff=document.getElementById('koKickoff').value;
+  if(!homeN||!awayN||!kickoff){showMsg('koAddMsg','⚠️ Completa equipos y fecha.',false);return;}
+  if(homeN===awayN){showMsg('koAddMsg','⚠️ Elige dos equipos distintos.',false);return;}
+  const home=ALL_TEAMS.find(e=>e.n===homeN), away=ALL_TEAMS.find(e=>e.n===awayN);
+  const key='ko_'+fase.toLowerCase()+'_'+Date.now();
+  const row={key,grupo_id:GRUPO_ID,fase,home_name:home.n,home_flag:home.f,away_name:away.n,away_flag:away.f,kickoff:new Date(kickoff).toISOString()};
+  const {error}=await sb.from('partidos_eliminatoria').insert(row);
+  if(error){showMsg('koAddMsg','❌ Error: '+error.message,false);return;}
+  showMsg('koAddMsg','✅ Cruce añadido.');
+  document.getElementById('koKickoff').value='';
+  renderKOAdminList();
+}
+
+async function deleteKOMatch(key){
+  if(!confirm('¿Eliminar este cruce? Se perderán los pronósticos asociados.'))return;
+  await sb.from('pronosticos_eliminatoria').delete().eq('match_key',key);
+  await sb.from('resultados_eliminatoria').delete().eq('match_key',key);
+  await sb.from('partidos_eliminatoria').delete().eq('key',key);
+  renderKOAdminList();
+}
+
+async function saveKOResultsAdmin(){
+  const rows=[];
+  koPartidos.forEach(p=>{
+    const h=document.getElementById(`kra_${p.key}_h`),a=document.getElementById(`kra_${p.key}_a`);
+    if(h&&a&&h.value!==''&&a.value!=='')
+      rows.push({match_key:p.key,goles_local:+h.value,goles_visitante:+a.value,updated_at:new Date()});
+  });
+  if(!rows.length){showMsg('koResMsg','⚠️ No hay resultados que guardar.',false);return;}
+  const {error}=await sb.from('resultados_eliminatoria').upsert(rows,{onConflict:'match_key'});
+  error?showMsg('koResMsg','❌ Error al guardar.',false):(await loadKOData(),showMsg('koResMsg','✅ Resultados eliminatoria guardados.'));
 }
 
 async function saveBonusResults(){
@@ -926,36 +1173,44 @@ async function renderLB(){
     sb.from('participantes').select('*').eq('grupo',GRUPO_ID).order('created_at')
   ]);
   results={};(resData||[]).forEach(r=>results[r.match_key]=[+r.goles_local,+r.goles_visitante]);
+  await loadKOData();
   const playerIds=(players||[]).map(p=>p.id);
-  const [{data:allPreds},{data:allBonus}]=await Promise.all([
+  const [{data:allPreds},{data:allBonus},{data:allKOPreds}]=await Promise.all([
     playerIds.length?sb.from('pronosticos').select('*').in('participante_id',playerIds):Promise.resolve({data:[]}),
-    playerIds.length?sb.from('pronosticos_bonus').select('*').in('participante_id',playerIds):Promise.resolve({data:[]})
+    playerIds.length?sb.from('pronosticos_bonus').select('*').in('participante_id',playerIds):Promise.resolve({data:[]}),
+    (playerIds.length&&koPartidos.length)?sb.from('pronosticos_eliminatoria').select('*').in('participante_id',playerIds):Promise.resolve({data:[]})
   ]);
   const predMap={};(allPreds||[]).forEach(p=>{if(!predMap[p.participante_id])predMap[p.participante_id]={};predMap[p.participante_id][p.match_key]={h:p.goles_local,a:p.goles_visitante,r:p.resultado};});
   const bonusMap={};(allBonus||[]).forEach(b=>bonusMap[b.participante_id]=b);
+  const koPredMap={};(allKOPreds||[]).forEach(p=>{if(!koPredMap[p.participante_id])koPredMap[p.participante_id]={};koPredMap[p.participante_id][p.match_key]={h:p.goles_local,a:p.goles_visitante,r:p.resultado};});
   const scores=(players||[]).map(p=>{
-    let pts=0,exact=0,ptsB=0;
+    let pts=0,exact=0,ptsB=0,ptsKO=0;
     const pm=predMap[p.id]||{};
     PARTIDOS.forEach(m=>{
       const r=results[m.key],pr=pm[m.key];if(!r||!pr)return;
       const p2=calcPtsMatch(pr,r);pts+=p2;if(p2===3)exact++;
+    });
+    const koPm=koPredMap[p.id]||{};
+    koPartidos.forEach(m=>{
+      const r=koResults[m.key],pr=koPm[m.key];if(!r||!pr)return;
+      const p2=calcPtsKO(pr,r);pts+=p2;ptsKO+=p2;if(p2===3)exact++;
     });
     const bm=bonusMap[p.id]||{};
     if(bonusReal.campeon&&bm.campeon===bonusReal.campeon){pts+=5;ptsB+=5;}
     if(bonusReal.subcamp&&bm.subcamp===bonusReal.subcamp){pts+=2;ptsB+=2;}
     if(bonusReal.goleador&&bm.goleador===bonusReal.goleador){pts+=3;ptsB+=3;}
     if(bonusReal.mvp&&bm.mvp===bonusReal.mvp){pts+=2;ptsB+=2;}
-    return{name:p.nombre,pts,exact,ptsB,isMe:p.id===currentPlayer.id};
+    return{name:p.nombre,pts,exact,ptsB,ptsKO,isMe:p.id===currentPlayer.id};
   }).sort((a,b)=>b.pts-a.pts||b.exact-a.exact);
 
   const el=document.getElementById('lbContainer');
   if(!scores.length){el.innerHTML='<p style="font-size:13px;color:var(--muted)">Sin participantes.</p>';return;}
-  el.innerHTML=`<table class="lb-table"><thead><tr><th>#</th><th>Jugador</th><th>Pts</th><th>⚽</th><th>⭐</th></tr></thead><tbody>
+  el.innerHTML=`<table class="lb-table"><thead><tr><th>#</th><th>Jugador</th><th>Pts</th><th>⚽</th><th>🏆KO</th><th>⭐</th></tr></thead><tbody>
     ${scores.map((s,i)=>`<tr${s.isMe?' style="background:rgba(212,160,23,.06)"':''}>
       <td><span class="medal ${['m1','m2','m3'][i]||'mn'}">${['🥇','🥈','🥉'][i]||i+1}</span></td>
       <td style="font-weight:500">${s.name}${s.isMe?' 👤':''}</td>
       <td><span class="pts-pill${i===0?' gold':''}">${s.pts}</span></td>
-      <td>${s.exact}</td><td>${s.ptsB}</td>
+      <td>${s.exact}</td><td>${s.ptsKO}</td><td>${s.ptsB}</td>
     </tr>`).join('')}</tbody></table>`;
 
   const played=PARTIDOS.filter(p=>results[p.key]);
@@ -986,35 +1241,7 @@ async function renderLB(){
   }
 }
 
-// ── EMAIL ─────────────────────────────────────────────────────
-async function genEmail(){
-  await loadResults();
-  const [{data:players},{data:allPreds}]=await Promise.all([
-    sb.from('participantes').select('*').eq('grupo',GRUPO_ID).order('created_at'),
-    sb.from('pronosticos').select('*')
-  ]);
-  const predMap={};(allPreds||[]).forEach(p=>{if(!predMap[p.participante_id])predMap[p.participante_id]={};predMap[p.participante_id][p.match_key]={h:p.goles_local,a:p.goles_visitante,r:p.resultado};});
-  const scores=(players||[]).map(p=>{
-    let pts=0,exact=0;const pm=predMap[p.id]||{};
-    PARTIDOS.forEach(m=>{const r=results[m.key],pr=pm[m.key];if(!r||!pr)return;const p2=calcPtsMatch(pr,r);pts+=p2;if(p2===3)exact++;});
-    return{name:p.nombre,pts,exact};
-  }).sort((a,b)=>b.pts-a.pts||b.exact-a.exact);
-  const el=document.getElementById('emailPre');
-  if(!scores.length){el.style.display='none';return;}
-  const d=new Date().toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'});
-  const played=Object.keys(results).length;
-  let txt=`🏆 QUINIELA MUNDIAL 2026 🇺🇸🇲🇽🇨🇦\n${d} · ${played} partidos jugados\n${'═'.repeat(44)}\n\n📊 CLASIFICACIÓN\n`;
-  scores.forEach((s,i)=>{txt+=`${['🥇','🥈','🥉'][i]||(i+1)+'.'} ${s.name.padEnd(22)}${String(s.pts+' pts').padStart(8)}\n`;});
-  txt+=`\n${'═'.repeat(44)}\n3pts exacto · 1pt resultado · +5🏆 +2🥈 +3👟 +2⭐\n¡Mucha suerte! ⚽`;
-  el.style.display='block';el.textContent=txt;
-}
-function copyEmail(){
-  const el=document.getElementById('emailPre');if(!el.textContent)return;
-  navigator.clipboard.writeText(el.textContent).then(()=>{
-    const b=document.querySelectorAll('#tab-email .btn')[1];
-    b.textContent='✅ ¡Copiado!';setTimeout(()=>b.textContent='📋 Copiar',2000);
-  });
-}
+
 </script>
 </body>
 </html>
