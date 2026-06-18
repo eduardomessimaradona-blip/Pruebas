@@ -641,7 +641,7 @@ let serverTimeOffset=0;
 async function syncServerTime(){
   try{
     const t0=Date.now();
-    const resp=await fetch(SUPABASE_URL+'/rest/v1/?apikey='+SUPABASE_KEY);
+    const resp=await fetch(SUPABASE_URL+'/rest/v1/participantes?select=id&limit=1',{headers:{apikey:SUPABASE_KEY}});
     const t1=Date.now();
     const d=resp.headers.get('date');
     if(d) serverTimeOffset=new Date(d).getTime()-Math.round((t0+t1)/2);
