@@ -337,6 +337,7 @@ header p{font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:upp
         <div class="row">
           <div class="field"><label>Fase</label>
             <select id="koFase">
+              <option value="Dieciseisavos">Dieciseisavos</option>
               <option value="Octavos">Octavos</option>
               <option value="Cuartos">Cuartos</option>
               <option value="Semis">Semis</option>
@@ -386,7 +387,7 @@ header p{font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:upp
 const SUPABASE_URL='https://lnefvahjpfbtomupfgkd.supabase.co';
 const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZWZ2YWhqcGZidG9tdXBmZ2tkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2MzMyNTUsImV4cCI6MjA5NTIwOTI1NX0.Prb2IP_Znj3m0PumoW6vIbDUpdEBM7i4Z8gq17HQ6fQ';
 const FOOTBALL_API_KEY='173de29b7acd450282d6cb39b9627468';
-const GRUPO_ID='pruebas';
+const GRUPO_ID='FOENER';
 const LOCK_HOURS= 3 ; // horas antes de bloquear
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
@@ -926,7 +927,7 @@ async function renderKOAdminList(){
   const byFase={};
   koPartidos.forEach(p=>{if(!byFase[p.fase])byFase[p.fase]=[];byFase[p.fase].push(p);});
   let html='';
-  ['Octavos','Cuartos','Semis','Final'].forEach(fase=>{
+  ['Dieciseisavos','Octavos','Cuartos','Semis','Final'].forEach(fase=>{
     if(!byFase[fase])return;
     html+=`<div style="font-size:11px;font-weight:600;color:var(--gold);margin:10px 0 4px">${fase}</div>`;
     byFase[fase].forEach(p=>{
@@ -1110,7 +1111,7 @@ async function renderLB(){
 
 
 // ── KNOCKOUT ──────────────────────────────────────────────────
-const FASES=['Octavos','Cuartos','Semis','Final'];
+const FASES=['Dieciseisavos','Octavos','Cuartos','Semis','Final'];
 let koPartidos=[], koResults={};
 
 async function loadKOData(){
@@ -1150,12 +1151,13 @@ async function renderKnockout(){
   const byFase={};
   koPartidos.forEach(p=>{if(!byFase[p.fase])byFase[p.fase]=[];byFase[p.fase].push(p);});
 
-  const faseOrder=['Octavos','Cuartos','Semis','Final'];
+  const faseOrder=['Dieciseisavos','Octavos','Cuartos','Semis','Final'];
   let html='<div class="notice">⏱️ Pronósticos bloqueados 3h antes de cada partido. Sin empates en eliminatoria — pronostica quién gana.</div>';
 
   faseOrder.forEach(fase=>{
     if(!byFase[fase])return;
-    html+=`<div class="date-divider">🏆 ${fase} de Final</div>`;
+    const faseLabel=fase==='Final'?'🏆 Final':`🏆 ${fase} de Final`;
+    html+=`<div class="date-divider">${faseLabel}</div>`;
     byFase[fase].forEach(p=>{
       const locked=isLocked(p.kickoff);
       const pred=predMap[p.key]||{};
